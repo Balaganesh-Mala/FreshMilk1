@@ -9,8 +9,13 @@ import OrderDetailsPage from "./pages/OrderDetailsPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import AccountPage from "./pages/AccountPage";
+import EditProfile from "./pages/EditProfile.jsx";
 import CheckoutPage from "./pages/CheckoutPage";
 import Footer from "./components/layout/Footer";
+
+import EditAddressPage from "./pages/EditAddressPage.jsx";
+import SubscriptionsPage from "./pages/SubscriptionsPage.jsx";
+import WishlistPage from "./pages/WishlistPage.jsx";
 
 export default function App() {
   return (
@@ -28,7 +33,14 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<SignupPage />} />
         <Route path="/account" element={<AccountPage />} />
-        <Route path="*" element={<div className="p-20 text-center">404 - Page Not Found</div>} />
+        <Route path="/edit-profile" element={<EditProfile />} />
+        <Route path="/add-address" element={<EditAddressPage />} />
+        <Route path="/subscription" element={<SubscriptionsPage />} />
+        <Route path="/wishlist" element={<WishlistPage />} />
+        <Route
+          path="*"
+          element={<div className="p-20 text-center">404 - Page Not Found</div>}
+        />
       </Routes>
       <Footer />
     </>

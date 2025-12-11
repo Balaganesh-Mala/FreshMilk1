@@ -7,19 +7,22 @@ import {
 } from "../api/project.api";
 
 export default function CartPage() {
-  const [items, setItems] = useState([]);
+  const [cartItems, setCartItems] = useState([]);
+  const [subtotal, setSubtotal] = useState(0);
+  const [grandTotal, setGrandTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Load cart from backend
+  // Load Cart
   const loadCart = async () => {
-    setLoading(true);
     try {
       const res = await fetchCart();
-      const backendItems = res?.data?.cart?.items;
-      setItems(Array.isArray(backendItems) ? backendItems : []);
+      const cart = res.data.cart;
+
+      setCartItems(cart.items || []);
+      setSubtotal(cart.subtotal || 0);
+      setGrandTotal(cart.grandTotal || 0);
     } catch (err) {
-      console.log("Cart fetch failed", err);
-      setItems([]);
+      console.error("Cart load error:", err);
     } finally {
       setLoading(false);
     }
@@ -29,174 +32,183 @@ export default function CartPage() {
     loadCart();
   }, []);
 
-  // calculate total
-  const subtotal = items.reduce((sum, i) => sum + (i.total || 0), 0);
-  const deliveryCharge = 10;
-  const grandTotal = subtotal + deliveryCharge;
+  // Update Qty
+  const handleQtyUpdate = async (item, newQty) => {
+    if (newQty < 1) return;
 
-  // ⭐ Change quantity locally + backend sync
-  const changeQuantity = async (productId, variantSize, delta) => {
-    const updatedItems = items.map((item) =>
-      item.product?._id === productId &&
-      (item.variant?.size || null) === (variantSize || null)
-        ? {
-            ...item,
-            quantity: Math.max(1, item.quantity + delta),
-            total: Math.max(1, item.quantity + delta) * item.price,
-          }
-        : item
-    );
-
-    setItems(updatedItems); // fast UI update
+    const productId = item.product?._id;
+    const variantSize = item.variant?.size || null;
 
     try {
-      await updateCartItem({
-        productId,
-        variantSize,
-        quantity: updatedItems.find(
-          (i) =>
-            i.product._id === productId &&
-            (i.variant?.size || null) === (variantSize || null)
-        )?.quantity,
-      });
+      await updateCartItem(productId, newQty, variantSize);
+      loadCart();
     } catch (err) {
-      console.log("Qty update failed:", err);
-      loadCart(); // refresh accurate data
+      alert(err.response?.data?.message || "Failed to update quantity");
     }
   };
 
-  // ⭐ Remove item instantly + backend sync
-  const deleteItem = async (productId, variantSize) => {
-    setItems((prev) =>
-      prev.filter(
-        (item) =>
-          !(
-            item.product._id === productId &&
-            (item.variant?.size || null) === (variantSize || null)
-          )
-      )
-    );
+  // Remove Item
+  const handleRemove = async (item) => {
+    const productId = item.product?._id;
+    const variantSize = item.variant?.size || null;
 
     try {
-      await removeCartItem({ productId, variantSize });
-    } catch (err) {
-      console.log("Remove failed", err);
+      await removeCartItem(productId, variantSize);
       loadCart();
+    } catch (err) {
+      alert(err.response?.data?.message || "Remove failed");
     }
   };
 
   if (loading)
     return (
-      <div className="text-center py-20 text-gray-500">
-        Loading cart...
-      </div>
+      <p className="py-20 text-center text-[#3A8DFF] animate-pulse">
+        Loading your cart…
+      </p>
     );
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10">
-      <h2 className="text-3xl font-bold text-blue-900 mb-6">Your Cart</h2>
+    <div className="bg-[#F4FAFF] min-h-screen pb-20">
+      {/* Header */}
+      <div className="max-w-6xl mx-auto px-6 py-8 flex justify-between">
+        <h1 className="text-3xl font-bold text-[#1F2D3D]">Your Cart</h1>
+        <Link
+          to="/products"
+          className="text-[#3A8DFF] font-medium hover:underline"
+        >
+          Continue Shopping →
+        </Link>
+      </div>
 
-      {!items.length ? (
-        <div className="text-center py-16">
-          <img src="/empty-cart.png" className="w-48 mx-auto" />
-          <p className="text-gray-600">Your cart is empty.</p>
+      {/* Empty Cart */}
+      {cartItems.length === 0 && (
+        <div className="text-center mt-20">
+          <img
+            src="https://cdn-icons-png.flaticon.com/512/11329/11329060.png"
+            className="w-40 mx-auto opacity-80"
+          />
+          <h2 className="text-xl mt-4 text-[#1F2D3D] font-semibold">
+            Your cart is empty
+          </h2>
+
           <Link
             to="/products"
-            className="mt-4 inline-block bg-blue-600 text-white px-6 py-3 rounded-lg"
+            className="bg-[#3A8DFF] text-white px-6 py-3 rounded-lg mt-6 inline-block shadow hover:bg-[#3377D6] transition"
           >
-            Shop Now
+            Browse Products
           </Link>
         </div>
-      ) : (
-        <div className="grid md:grid-cols-3 gap-10">
-          {/* cart items */}
+      )}
+
+      {/* Cart with Items */}
+      {cartItems.length > 0 && (
+        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-10">
+          {/* LEFT — Cart Items */}
           <div className="md:col-span-2 space-y-6">
-            {items.map((item) => (
-              <div
-                key={`${item.product._id}-${item.variant?.size}`}
-                className="bg-white p-4 rounded-xl shadow flex gap-4 items-center"
-              >
-                <img
-                  src={
-                    item.productImage ||
-                    item.product?.images?.[0]?.url ||
-                    "/placeholder.png"
-                  }
-                  alt={item.productName || item.product?.name}
-                  className="w-24 h-24 object-cover rounded-lg"
-                />
+            {cartItems.map((item) => {
+              const product = item.product;
+              const price = item.price ?? product?.price ?? 0;
 
-                <div className="flex-1">
-                  <p className="font-bold">{item.productName || item.product?.name}</p>
-
-                  {item.variant?.size && (
-                    <p className="text-gray-500 text-sm">
-                      Size: {item.variant.size}
-                    </p>
-                  )}
-
-                  <p className="text-blue-600 font-semibold mt-1">
-                    ₹{item.total}
-                  </p>
-
-                  {/* Quantity controls */}
-                  <div className="flex items-center gap-3 mt-2">
-                    <button
-                      onClick={() =>
-                        changeQuantity(item.product._id, item.variant?.size, -1)
-                      }
-                      className="px-2 bg-gray-200 rounded"
-                    >
-                      -
-                    </button>
-
-                    <span>{item.quantity}</span>
-
-                    <button
-                      onClick={() =>
-                        changeQuantity(item.product._id, item.variant?.size, 1)
-                      }
-                      className="px-2 bg-gray-200 rounded"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  className="text-red-500 underline text-sm"
-                  onClick={() =>
-                    deleteItem(item.product._id, item.variant?.size)
-                  }
+              return (
+                <div
+                  key={item._id}
+                  className="bg-white p-5 rounded-2xl shadow-md border border-[#E0ECF7] flex gap-5 items-start"
                 >
-                  Remove
-                </button>
-              </div>
-            ))}
+                  {/* Product Image */}
+                  <img
+                    src={
+                      product?.images?.[0]?.url ||
+                      "https://via.placeholder.com/100"
+                    }
+                    className="w-28 h-28 object-cover rounded-xl border border-[#D6E8F5]"
+                  />
+
+                  {/* Product Details */}
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg text-[#1F2D3D]">
+                      {product?.name || "Product removed"}
+                    </h3>
+
+                    {item.variant?.size && (
+                      <p className="text-sm text-[#5A6A7A] mt-1">
+                        Size: {item.variant.size}
+                      </p>
+                    )}
+
+                    <p className="text-[#3A8DFF] font-bold mt-2">₹{price}</p>
+
+                    {/* Quantity Controls */}
+                    {product ? (
+                      <div className="flex items-center gap-4 mt-3">
+                        <button
+                          onClick={() =>
+                            handleQtyUpdate(item, item.quantity - 1)
+                          }
+                          className="w-8 h-8 bg-[#E3EEF7] rounded-lg flex items-center justify-center text-lg hover:bg-[#D4E4F2]"
+                        >
+                          −
+                        </button>
+
+                        <span className="text-lg font-medium">
+                          {item.quantity}
+                        </span>
+
+                        <button
+                          onClick={() =>
+                            handleQtyUpdate(item, item.quantity + 1)
+                          }
+                          className="w-8 h-8 bg-[#3A8DFF] text-white rounded-lg flex items-center justify-center hover:bg-[#3377D6]"
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-red-500 text-sm mt-2">
+                        This product is no longer available.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Remove Button */}
+                  <button
+                    onClick={() => handleRemove(item)}
+                    className="text-red-500 text-2xl font-bold hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
-          {/* summary */}
-          <div className="bg-white p-6 rounded-xl shadow">
-            <h3 className="text-xl font-bold mb-4">Price Details</h3>
+          {/* RIGHT — Summary */}
+          <div className="bg-white p-6 rounded-2xl shadow-md border border-[#E0ECF7] h-fit">
+            <h3 className="text-xl font-bold text-[#1F2D3D]">
+              Order Summary
+            </h3>
 
-            <p className="flex justify-between">
-              <span>Subtotal</span> <span>₹{subtotal}</span>
-            </p>
+            <div className="flex justify-between mt-4 text-[#4A4A4A]">
+              <span>Subtotal</span>
+              <span>₹{subtotal}</span>
+            </div>
 
-            <p className="flex justify-between">
-              <span>Delivery Charge</span> <span>₹{deliveryCharge}</span>
-            </p>
+            <div className="flex justify-between mt-3">
+              <span>Delivery</span>
+              <span className="text-[#4CAF50] font-medium">Free</span>
+            </div>
 
-            <hr className="my-4" />
+            <div className="border-t my-4" />
 
-            <p className="flex justify-between font-bold text-lg">
-              <span>Total</span> <span>₹{grandTotal}</span>
-            </p>
+            <div className="flex justify-between text-lg font-bold text-[#1F2D3D]">
+              <span>Total</span>
+              <span>₹{grandTotal}</span>
+            </div>
 
-            <Link to="/checkout">
-              <button className="mt-6 w-full bg-green-600 text-white py-3 rounded-lg">
-                Proceed to Checkout
-              </button>
+            <Link
+              to="/checkout"
+              className="block mt-6 text-center bg-[#3A8DFF] text-white py-3 rounded-xl font-semibold shadow hover:bg-[#3377D6] transition"
+            >
+              Proceed to Checkout
             </Link>
           </div>
         </div>

@@ -16,7 +16,6 @@ export default function SidebarFilters({
         value={selectedCategory}
         onChange={(e) => setSelectedCategory(e.target.value)}
       >
-        <option value="All">All</option>
         {categories.map((c, idx) => (
           <option key={idx} value={c.value}>
             {c.label}

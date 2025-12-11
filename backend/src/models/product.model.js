@@ -15,9 +15,9 @@ const productSchema = new mongoose.Schema(
     // 👇 Grocery/Milk custom improvement
     variants: [
       {
-        size: String,       // 500ml, 1L, 200gm, 1kg etc.
-        price: Number,
-        stock: Number,
+        size: { type: String, required: true },
+        price: { type: Number, required: true },
+        stock: { type: Number, default: 0 },
       },
     ],
 

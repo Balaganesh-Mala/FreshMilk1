@@ -1,12 +1,13 @@
 import asyncHandler from "express-async-handler";
 import mongoose from "mongoose";
+import Cart from "../models/cart.model.js";
 import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
-import { razorpay } from "../config/razorpay.js"; // shared instance
+import { razorpay } from "../config/razorpay.js";
 
-//
-// 🔍 Helper 1: Load product details fast
-//
+/* ---------------------------------------------------------
+   Helper: Load Products Fast
+--------------------------------------------------------- */
 const loadProductsMap = async (orderItems) => {
   const ids = orderItems.map((i) => i.productId);
   const products = await Product.find({ _id: { $in: ids } }).lean();
@@ -16,9 +17,9 @@ const loadProductsMap = async (orderItems) => {
   return map;
 };
 
-//
-// 🔍 Helper 2: Validate stock + calculate pricing
-//
+/* ---------------------------------------------------------
+   Helper: Validate Stock + Build Final Items
+--------------------------------------------------------- */
 const buildFinalOrderItems = async (orderItems) => {
   const productMap = await loadProductsMap(orderItems);
 
@@ -29,137 +30,181 @@ const buildFinalOrderItems = async (orderItems) => {
     const product = productMap.get(String(item.productId));
 
     if (!product) throw new Error(`Product not found: ${item.productId}`);
-    if (product.stock < item.quantity)
+
+    // Detect correct stock (variant or base)
+    let availableStock = product.stock;
+    let finalPrice = product.price;
+
+    if (item.variant?.size && product.variants?.length > 0) {
+      const variant = product.variants.find(
+        (v) => v.size === item.variant.size
+      );
+
+      if (!variant) {
+        throw new Error(`Variant "${item.variant.size}" not found for ${product.name}`);
+      }
+
+      availableStock = variant.stock;
+      finalPrice = variant.price;
+    }
+
+    // Stock validation
+    if (availableStock < item.quantity) {
       throw new Error(`Insufficient stock for ${product.name}`);
+    }
 
     finalItems.push({
       productId: product._id,
       name: product.name,
-      image: product.images?.[0]?.url,
+      image: product.images?.[0]?.url || "",
       quantity: item.quantity,
-      price: product.price,
-      variant: item.variant,
+      price: finalPrice,
+      variant: item.variant ?? null,
       isSubscription: item.isSubscription ?? false,
     });
 
-    itemsPrice += product.price * item.quantity;
+    itemsPrice += finalPrice * item.quantity;
   }
 
   return { finalItems, itemsPrice };
 };
 
-
-//
-// 🚀 CREATE ORDER — COD or ONLINE Razorpay
-//
+/* ---------------------------------------------------------
+   CREATE ORDER (COD / Online)
+--------------------------------------------------------- */
 export const createOrder = asyncHandler(async (req, res) => {
-  const { orderItems, shippingAddress, paymentMethod, deliverySlot, subscriptionConfig } = req.body;
+  const { orderItems, shippingAddress, paymentMethod } = req.body;
 
   if (!orderItems || !orderItems.length) {
     res.status(400);
     throw new Error("Order items required");
   }
+  if (!shippingAddress) {
+    res.status(400);
+    throw new Error("Shipping address required");
+  }
 
-  // Validate product stock + calculate price
+  // Build items + validate stock + calculate price
   const { finalItems, itemsPrice } = await buildFinalOrderItems(orderItems);
 
-  // 🔹 Razorpay Online Flow
-  if (paymentMethod === "online") {
-    const options = {
-      amount: Math.round(itemsPrice * 100),
-      currency: "INR",
-      receipt: `rcpt_${Date.now()}`,
-    };
+  /* ---------------------------------------------------------
+     CASH ON DELIVERY FLOW
+  --------------------------------------------------------- */
+  if (paymentMethod === "COD") {
+    const session = await mongoose.startSession();
 
-    const rzpOrder = await razorpay.orders.create(options);
+    try {
+      session.startTransaction();
 
-    // Order stored as Pending until payment verified
-    const order = await Order.create({
-      user: req.user._id,
-      orderItems: finalItems,
-      itemsPrice,
-      totalPrice: itemsPrice,
-      paymentMethod: "online",
-      paymentStatus: "Pending",
-      shippingAddress,
-      deliverySlot,
-      subscriptionConfig,
-      orderStatus: "Processing",
-    });
+      const [newOrder] = await Order.create(
+        [
+          {
+            user: req.user._id,
+            orderItems: finalItems,
+            itemsPrice,
+            totalPrice: itemsPrice,
+            shippingAddress,
+            paymentMethod: "COD",
+            paymentStatus: "Pending",
+            orderStatus: "Processing",
+          },
+        ],
+        { session }
+      );
 
-    return res.status(200).json({
-      success: true,
-      message: "Online order initiated",
-      razorpayOrderId: rzpOrder.id,
-      amount: rzpOrder.amount,
-      currency: "INR",
-      orderId: order._id,
-    });
+      /* ------------ DECREASE STOCK (normal + variants) ------------ */
+      const stockOps = finalItems.map((item) => {
+        if (item.variant?.size) {
+          // variant stock decrease
+          return {
+            updateOne: {
+              filter: {
+                _id: item.productId,
+                "variants.size": item.variant.size,
+              },
+              update: {
+                $inc: { "variants.$.stock": -item.quantity },
+              },
+            },
+          };
+        } else {
+          // base stock decrease
+          return {
+            updateOne: {
+              filter: { _id: item.productId },
+              update: { $inc: { stock: -item.quantity } },
+            },
+          };
+        }
+      });
+
+      await Product.bulkWrite(stockOps, { session });
+
+      // Clear user cart
+      await Cart.findOneAndUpdate(
+        { user: req.user._id },
+        { $set: { items: [], subtotal: 0, grandTotal: 0 } }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.status(201).json({
+        success: true,
+        message: "COD order placed successfully",
+        order: newOrder,
+      });
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
+    }
   }
 
-  // 🔹 COD FLOW — immediate order + stock deduction
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
+  /* ---------------------------------------------------------
+     ONLINE PAYMENT — Create Razorpay order
+  --------------------------------------------------------- */
+  const options = {
+    amount: Math.round(itemsPrice * 100), // in paise
+    currency: "INR",
+    receipt: `rcpt_${Date.now()}`,
+  };
 
-    const order = await Order.create(
-      [
-        {
-          user: req.user._id,
-          orderItems: finalItems,
-          itemsPrice,
-          totalPrice: itemsPrice,
-          paymentMethod: "COD",
-          paymentStatus: "Pending",
-          shippingAddress,
-          deliverySlot,
-          subscriptionConfig,
-          orderStatus: "Processing",
-        },
-      ],
-      { session }
-    );
+  const rzpOrder = await razorpay.orders.create(options);
 
-    // Update stock
-    const bulkOps = finalItems.map((it) => ({
-      updateOne: {
-        filter: { _id: it.productId },
-        update: { $inc: { stock: -it.quantity } },
-      },
-    }));
+  // Save order as "Pending Payment"
+  const order = await Order.create({
+    user: req.user._id,
+    orderItems: finalItems,
+    itemsPrice,
+    totalPrice: itemsPrice,
+    shippingAddress,
+    paymentMethod: "online",
+    paymentStatus: "Pending",
+    orderStatus: "Processing",
+    razorpayOrderId: rzpOrder.id,
+  });
 
-    await Product.bulkWrite(bulkOps, { session });
-
-    await session.commitTransaction();
-    session.endSession();
-
-    res.status(201).json({
-      success: true,
-      message: "COD order placed successfully",
-      order: order[0],
-    });
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    throw err;
-  }
+  return res.status(200).json({
+    success: true,
+    razorpayOrderId: rzpOrder.id,
+    orderId: order._id,
+    amount: rzpOrder.amount,
+    currency: "INR",
+  });
 });
 
-
-//
-// 📦 USER ORDERS
-//
+/* ---------------------------------------------------------
+   GET USER ORDERS
+--------------------------------------------------------- */
 export const getMyOrders = asyncHandler(async (req, res) => {
-  const orders = await Order.find({ user: req.user._id })
-    .populate("orderItems.productId", "name price images");
-
+  const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
   res.status(200).json({ success: true, orders });
 });
 
-
-//
-// 📦 ADMIN — All Orders
-//
+/* ---------------------------------------------------------
+   ADMIN — GET ALL ORDERS
+--------------------------------------------------------- */
 export const getAllOrders = asyncHandler(async (req, res) => {
   const orders = await Order.find()
     .populate("user", "name email")
@@ -168,10 +213,9 @@ export const getAllOrders = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, orders });
 });
 
-
-//
-// ✏️ ADMIN — Update order status
-//
+/* ---------------------------------------------------------
+   ADMIN — UPDATE ORDER STATUS
+--------------------------------------------------------- */
 export const updateOrderStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
 
@@ -192,15 +236,14 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: "Order updated",
+    message: "Order status updated",
     order,
   });
 });
 
-
-//
-// ❌ ADMIN — Delete order
-//
+/* ---------------------------------------------------------
+   ADMIN — DELETE ORDER
+--------------------------------------------------------- */
 export const deleteOrder = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
   if (!order) {
@@ -209,5 +252,6 @@ export const deleteOrder = asyncHandler(async (req, res) => {
   }
 
   await order.deleteOne();
+
   res.status(200).json({ success: true, message: "Order deleted" });
 });

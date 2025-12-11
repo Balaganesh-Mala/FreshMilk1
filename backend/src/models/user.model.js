@@ -2,34 +2,56 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+const addressSchema = new mongoose.Schema(
+  {
+    street: String,
+    city: String,
+    state: String,
+    pincode: String,
+    phone: String,
+    isDefault: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const subscriptionSchema = new mongoose.Schema(
+  {
+    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+    variantSize: String,
+    plan: String,
+    status: { type: String, default: "active" },
+  },
+  { timestamps: true }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, "Please enter your name"],
+      required: true,
       trim: true,
     },
 
     email: {
       type: String,
       unique: true,
-      sparse: true, // allows null values without conflict
+      sparse: true,
       lowercase: true,
       trim: true,
       match: [/^\S+@\S+\.\S+$/, "Invalid email format"],
     },
 
-    password: {
-      type: String,
-      minlength: 6,
-      select: false, // never returned unless manually selected
-    },
-
     phone: {
       type: String,
       unique: true,
-      sparse: true, // allows phone to be optional
+      sparse: true,
       trim: true,
+    },
+
+    password: {
+      type: String,
+      minlength: 6,
+      select: false,
     },
 
     authProvider: {
@@ -37,6 +59,11 @@ const userSchema = new mongoose.Schema(
       enum: ["email", "phone"],
       default: "email",
     },
+
+    emailVerified: { type: Boolean, default: false },
+    phoneVerified: { type: Boolean, default: false },
+
+    wallet: { type: Number, default: 0 },
 
     role: {
       type: String,
@@ -56,22 +83,16 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
-    addresses: [
-      {
-        street: String,
-        city: String,
-        state: String,
-        pincode: String,
-        phone: String,
-      },
-    ],
+    addresses: [addressSchema],
+
+    subscriptions: [subscriptionSchema],
+
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
 
-//
-// 🔐 Ensure either email OR phone exists
-//
+// must have email or phone
 userSchema.pre("save", function (next) {
   if (!this.email && !this.phone) {
     return next(new Error("Either email or phone must be provided"));
@@ -79,26 +100,19 @@ userSchema.pre("save", function (next) {
   next();
 });
 
-//
-// 🔑 Hash password before saving / resetting
-//
+// hash password
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
-//
-// 🔍 Compare entered password with stored hashed password
-//
-userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+// match password
+userSchema.methods.matchPassword = async function (entered) {
+  return await bcrypt.compare(entered, this.password);
 };
 
-//
-// 🔐 Generate JWT auth token
-//
+// JWT token
 userSchema.methods.generateAuthToken = function () {
   return jwt.sign(
     { id: this._id, role: this.role },
@@ -107,5 +121,4 @@ userSchema.methods.generateAuthToken = function () {
   );
 };
 
-const User = mongoose.model("User", userSchema);
-export default User;
+export default mongoose.model("User", userSchema);

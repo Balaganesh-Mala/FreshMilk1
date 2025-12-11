@@ -1,73 +1,119 @@
-import { useNavigate } from "react-router-dom";
+import React from "react";
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { FiArrowRight } from "react-icons/fi";
 
-export default function ProductCard({
-  id,
-  image,
-  title = "",
-  price = 0,
-  mrp = 0,
-  rating = 0,
-  isLoggedIn,
-  onAddToCart,
-}) {
-  const navigate = useNavigate();
+const ProductCard = ({ product }) => {
+  if (!product) {
+    console.warn("⚠ ProductCard received undefined product");
+    return null;
+  }
 
-  // Navigate to product details
-  const handleCardClick = () => {
-    if (id) navigate(`/product/${id}`);
-  };
+  /* Price Logic */
+  const basePrice =
+    product?.variants?.[0]?.price ?? product?.price ?? 0;
 
-  // Add to cart
-  const handleAddToCart = (e) => {
-    e.stopPropagation(); // Prevent opening product page
+  const mrp =
+    product?.variants?.[0]?.mrp ?? product?.mrp ?? basePrice;
 
-    if (!isLoggedIn) {
-      return navigate("/login");
-    }
+  const discount =
+    mrp > basePrice ? Math.round(((mrp - basePrice) / mrp) * 100) : 0;
 
-    if (onAddToCart) {
-      onAddToCart(id);
-    }
-  };
+  /* Safe image fallback */
+  const mainImage = product?.images?.[0]?.url || "/placeholder.png";
 
   return (
-    <div
-      className="bg-white rounded-xl shadow hover:shadow-lg transition p-3 border cursor-pointer"
-      onClick={handleCardClick}
+    <motion.div
+      whileHover={{ y: -6, scale: 1.03 }}
+      transition={{ type: "spring", stiffness: 180, damping: 14 }}
+      className="
+        bg-white 
+        rounded-2xl 
+        shadow-[0_4px_14px_rgba(0,0,0,0.08)] 
+        hover:shadow-[0_6px_22px_rgba(0,0,0,0.12)]
+        overflow-hidden 
+        border border-[#E3ECF4] 
+        cursor-pointer 
+        transition-all
+      "
     >
-      {/* Product Image */}
-      <img
-        src={image || "/placeholder.png"}
-        alt={title}
-        className="w-full h-52 object-cover rounded-lg"
-      />
+      {/* IMAGE */}
+      <Link to={`/product/${product._id}`}>
+        <div className="relative h-[210px] bg-[#F5FAFF]">
+          {/* DISCOUNT BADGE */}
+          {discount > 0 && (
+            <span
+              className="
+                absolute top-3 left-3 
+                bg-gradient-to-r from-[#3A8DFF] to-[#6AC8FF]
+                text-white text-[11px] 
+                px-2 py-1 
+                rounded-md shadow 
+                font-semibold
+              "
+            >
+              -{discount}%
+            </span>
+          )}
 
-      {/* Title */}
-      <h3 className="mt-3 text-sm font-semibold text-gray-800">
-        {title.length > 28 ? title.slice(0, 28) + "..." : title}
-      </h3>
+          <motion.img
+            whileHover={{ scale: 1.1 }}
+            transition={{ duration: 0.35 }}
+            src={mainImage}
+            alt={product.name}
+            className="w-full h-full object-cover rounded-b-lg"
+          />
+        </div>
+      </Link>
 
-      {/* Price */}
-      <div className="flex items-center gap-2 mt-1">
-        <p className="text-blue-600 font-bold text-lg">₹{price}</p>
+      {/* CONTENT */}
+      <div className="p-4">
+        {/* PRODUCT NAME */}
+        <h3
+          className="
+            font-semibold 
+            text-[#1F1F1F] 
+            text-[15px]
+            leading-tight 
+            truncate 
+            group-hover:text-[#3A8DFF] 
+            transition
+          "
+        >
+          {product.name}
+        </h3>
 
-        {mrp > price && (
-          <p className="text-gray-400 text-sm line-through">₹{mrp}</p>
-        )}
+        {/* PRICE */}
+        <div className="flex items-center gap-2 text-sm mt-2">
+          {mrp > basePrice && (
+            <span className="text-gray-400 line-through text-[13px]">
+              ₹{mrp}
+            </span>
+          )}
+          <span className="text-[#1F1F1F] font-bold text-[15px]">
+            ₹{basePrice}
+          </span>
+        </div>
+
+        {/* VIEW DETAILS */}
+        <div className="flex items-center justify-between mt-4">
+          <Link
+            to={`/product/${product._id}`}
+            className="
+              text-xs 
+              text-[#3A8DFF] 
+              font-medium 
+              flex items-center 
+              hover:underline 
+              transition
+            "
+          >
+            View <FiArrowRight className="ml-1" size={12} />
+          </Link>
+        </div>
       </div>
-
-      {/* Rating */}
-      <p className="text-sm text-gray-500">
-        ⭐ {rating ? rating.toFixed(1) : "0.0"}/5
-      </p>
-
-      {/* Add to Cart / Login button */}
-      <button
-        className="mt-2 w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
-        onClick={handleAddToCart}
-      >
-        {isLoggedIn ? "Add to Cart" : "Login to Buy"}
-      </button>
-    </div>
+    </motion.div>
   );
-}
+};
+
+export default ProductCard;

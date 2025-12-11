@@ -1,98 +1,191 @@
-import orders from "../data/orders";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { getMyOrders } from "../api/project.api";
 
 export default function OrdersPage() {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // Load Orders
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      const res = await getMyOrders();
+      setOrders(res.data.orders || []);
+    } catch (err) {
+      console.log("Failed to fetch orders:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  if (loading)
+    return (
+      <div className="text-center py-20 text-gray-500">
+        Loading orders...
+      </div>
+    );
+
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10">
-      <h2 className="text-3xl font-bold text-blue-900 mb-6">
-        My Orders
-      </h2>
+    <div className="max-w-7xl mx-auto px-6 py-10 space-y-10">
+
+      <h2 className="text-3xl font-bold text-blue-900">My Orders</h2>
 
       {/* Empty Orders */}
       {orders.length === 0 ? (
         <div className="text-center py-16">
-          <img src="/empty-orders.png" alt="empty" className="w-44 mx-auto" />
-          <p className="text-gray-500 mt-4">
-            No orders yet. Start shopping now!
-          </p>
-          <Link
-            to="/products"
-            className="mt-4 inline-block bg-blue-600 text-white px-6 py-3 rounded-lg"
-          >
-            Shop Now
-          </Link>
+          <img src="/empty-orders.png" className="w-44 mx-auto" />
+          <p className="text-gray-500 mt-4">No orders yet.</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {orders.map((order) => (
-            <div
-              key={order.id}
-              className="bg-white p-5 rounded-xl shadow-md border hover:shadow-lg transition"
-            >
-              {/* Order Header */}
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-semibold text-gray-800">
-                    Order ID: {order.id}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Ordered on: {order.date}
+        <>
+          {/* Order Table */}
+          <div className="overflow-x-auto bg-white shadow rounded-xl p-4">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-blue-50 border-b">
+                  <th className="p-3 font-semibold">Order ID</th>
+                  <th className="p-3 font-semibold">Date</th>
+                  <th className="p-3 font-semibold">Total</th>
+                  <th className="p-3 font-semibold">Status</th>
+                  <th className="p-3 font-semibold text-center">Details</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {orders.map((order) => (
+                  <tr
+                    key={order._id}
+                    className="border-b hover:bg-gray-50 transition"
+                  >
+                    <td className="p-3">{order._id}</td>
+
+                    <td className="p-3">
+                      {new Date(order.createdAt).toLocaleDateString()}
+                    </td>
+
+                    <td className="p-3 text-blue-600 font-semibold">
+                      ₹{order.totalPrice}
+                    </td>
+
+                    <td className="p-3">
+                      <span
+                        className={`px-3 py-1 text-sm rounded-lg font-medium ${
+                          order.orderStatus === "Delivered"
+                            ? "bg-green-100 text-green-600"
+                            : order.orderStatus === "Processing"
+                            ? "bg-orange-100 text-orange-600"
+                            : "bg-blue-100 text-blue-600"
+                        }`}
+                      >
+                        {order.orderStatus}
+                      </span>
+                    </td>
+
+                    <td className="p-3 text-center">
+                      <button
+                        onClick={() =>
+                          setSelectedOrder(
+                            selectedOrder?._id === order._id ? null : order
+                          )
+                        }
+                        className="text-blue-600 font-medium underline"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Expand Details (SINGLE PAGE MODE) */}
+          {selectedOrder && (
+            <div className="bg-white p-6 rounded-xl shadow border space-y-4">
+              <h3 className="text-xl font-bold text-blue-900">
+                Order Details
+              </h3>
+
+              {selectedOrder.orderItems.map((item, idx) => (
+                <div key={idx} className="flex gap-4 items-center border-b pb-4">
+                  <img
+                    src={item.image}
+                    className="w-16 h-16 object-cover rounded-lg"
+                  />
+
+                  <div className="flex-1">
+                    <p className="font-semibold">{item.name}</p>
+                    <p className="text-gray-500 text-sm">
+                      Qty: {item.quantity} • {item.variant}
+                    </p>
+                  </div>
+
+                  <p className="font-semibold text-blue-600">
+                    ₹{item.price * item.quantity}
                   </p>
                 </div>
+              ))}
 
-                <span
-                  className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                    order.status === "Delivered"
-                      ? "bg-green-100 text-green-600"
-                      : order.status === "Processing"
-                      ? "bg-orange-100 text-orange-600"
-                      : "bg-blue-100 text-blue-600"
-                  }`}
-                >
-                  {order.status}
-                </span>
-              </div>
+              {/* Price Summary */}
+              <div className="pt-4 border-t space-y-2 text-gray-700">
 
-              <hr className="my-4" />
+  {/* Items Price */}
+  <p className="flex justify-between">
+    <span>Items Price</span>
+    <span>₹{selectedOrder.itemsPrice}</span>
+  </p>
 
-              {/* Items List UI */}
-              <div className="space-y-3">
-                {order.items.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-4"
-                  >
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="w-16 h-16 rounded-lg object-cover"
-                    />
+  {/* Payment Method */}
+  <p className="flex justify-between">
+    <span>Payment Method</span>
+    <span className="font-medium text-blue-700">
+      {selectedOrder.paymentMethod === "COD" ? "Cash on Delivery" : "Online Payment"}
+    </span>
+  </p>
 
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800">{item.name}</p>
-                      <p className="text-gray-500 text-sm">
-                        Qty: {item.quantity} • {item.variant}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+  {/* Payment Status */}
+  <p className="flex justify-between">
+    <span>Payment Status</span>
+    <span
+      className={`font-medium ${
+        selectedOrder.paymentStatus === "Paid"
+          ? "text-green-600"
+          : "text-red-500"
+      }`}
+    >
+      {selectedOrder.paymentStatus}
+    </span>
+  </p>
+{selectedOrder.paymentInfo?.id && (
+  <p className="flex justify-between">
+    <span>Transaction ID</span>
+    <span className="text-sm text-gray-600">{selectedOrder.paymentInfo.id}</span>
+  </p>
+)}
 
-              {/* Footer Bar Bottom */}
-              <div className="flex justify-between items-center mt-4">
-                <p className="font-bold text-blue-700 text-lg">
-                  Total: ₹{order.total}
-                </p>
-                <Link
-                  to={`/order/${order.id}`}
-                  className="text-blue-600 font-medium underline text-sm hover:text-blue-800"
-                >
-                  View Details
-                </Link>
-              </div>
+  {/* Total Amount */}
+  <p className="flex justify-between font-bold text-blue-800 text-lg">
+    <span>Total Amount</span>
+    <span>₹{selectedOrder.totalPrice}</span>
+  </p>
+
+</div>
+
+
+              <button
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg mt-4"
+                onClick={() => setSelectedOrder(null)}
+              >
+                Close
+              </button>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );

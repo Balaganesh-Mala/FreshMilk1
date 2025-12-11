@@ -1,10 +1,18 @@
 import asyncHandler from "express-async-handler";
 import Product from "../models/product.model.js";
+import Order from "../models/order.model.js";
 import cloudinary from "../config/cloudinary.js";
 import { uploadMultipleToCloudinary } from "../middleware/upload.middleware.js";
 
 //
-//  CREATE PRODUCT
+// SKU Generator
+//
+const generateSKU = () =>
+  `MILK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+
+//
+// CREATE PRODUCT
 //
 export const createProduct = asyncHandler(async (req, res) => {
   try {
@@ -12,7 +20,7 @@ export const createProduct = asyncHandler(async (req, res) => {
       name,
       description,
       price,
-      stock,
+      baseStock,
       mrp,
       weight,
       flavor,
@@ -22,7 +30,7 @@ export const createProduct = asyncHandler(async (req, res) => {
       isBestSeller,
       variants,
       isSubscriptionAvailable,
-      expiryDate
+      expiryDate,
     } = req.body;
 
     if (!name || !description || !price || !category) {
@@ -30,26 +38,31 @@ export const createProduct = asyncHandler(async (req, res) => {
       throw new Error("Required fields missing");
     }
 
-    // Parse variants if sent as JSON string (common in frontend forms)
     let parsedVariants = [];
+
     if (variants) {
-      parsedVariants = typeof variants === "string" ? JSON.parse(variants) : variants;
+      parsedVariants =
+        typeof variants === "string" ? JSON.parse(variants) : variants;
+
+      // ensure no empty variant
+      parsedVariants = parsedVariants.filter(
+        (v) => v.size && v.price !== undefined
+      );
     }
 
-    // Upload product images (cloudinary)
+    // Upload Images
     let imageData = [];
-    if (req.files && req.files.length > 0) {
+    if (req.files?.length > 0) {
       imageData = await uploadMultipleToCloudinary(req.files, "products");
     }
 
-    // Auto-generate SKU => MILK-000123
-    const sku = `MILK-${Date.now().toString().slice(-6)}`;
+    const sku = generateSKU();
 
     const product = await Product.create({
       name,
       description,
       price,
-      stock,
+      baseStock,
       mrp,
       weight,
       flavor,
@@ -61,15 +74,14 @@ export const createProduct = asyncHandler(async (req, res) => {
       sku,
       expiryDate,
       isSubscriptionAvailable,
-      images: imageData
+      images: imageData,
     });
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       message: "Product created successfully",
-      product
+      product,
     });
-
   } catch (err) {
     res.status(500);
     throw new Error(err.message);
@@ -78,11 +90,11 @@ export const createProduct = asyncHandler(async (req, res) => {
 
 
 //
-//  GET ALL PRODUCTS
+// GET ALL PRODUCTS
 //
-
 export const getAllProducts = asyncHandler(async (req, res) => {
-  const { search, category, featured, bestseller, flavor, subscription, sort } = req.query;
+  const { search, category, featured, bestseller, flavor, subscription, sort } =
+    req.query;
 
   let query = {};
 
@@ -95,21 +107,14 @@ export const getAllProducts = asyncHandler(async (req, res) => {
 
   let dbQuery = Product.find(query).populate("category", "name");
 
-  // Sorting (variant based or normal)
   if (sort === "low-high") dbQuery.sort({ price: 1 });
   if (sort === "high-low") dbQuery.sort({ price: -1 });
-
-  // Default sorting latest
   if (!sort) dbQuery.sort({ createdAt: -1 });
 
   const products = await dbQuery;
 
-  res.status(200).json({
-    success: true,
-    products
-  });
+  res.status(200).json({ success: true, products });
 });
-
 
 
 //
@@ -126,8 +131,9 @@ export const getProductById = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, product });
 });
 
+
 //
-//  UPDATE PRODUCT
+// UPDATE PRODUCT
 //
 export const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
@@ -137,60 +143,61 @@ export const updateProduct = asyncHandler(async (req, res) => {
     throw new Error("Product not found");
   }
 
-  // New image upload logic
-  if (req.files && req.files.length > 0) {
-    // Delete old Cloudinary images
-    for (const img of product.images) {
-      if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
+  if (req.files?.length > 0) {
+    if (product.images?.length > 0) {
+      for (const img of product.images) {
+        if (img?.public_id)
+          await cloudinary.uploader.destroy(img.public_id);
+      }
     }
 
-    // Upload new images
-    const newImageData = await uploadMultipleToCloudinary(req.files, "products");
-    product.images = newImageData;
+    const newImages = await uploadMultipleToCloudinary(req.files, "products");
+    product.images = newImages;
   }
 
-  // Update text fields
   const fields = [
     "name",
     "description",
     "price",
+    "baseStock",
     "mrp",
-    "stock",
     "category",
     "flavor",
     "weight",
     "brand",
     "isFeatured",
     "isBestSeller",
+    "expiryDate",
     "isSubscriptionAvailable",
-    "expiryDate"
   ];
 
-  fields.forEach((key) => {
-    if (req.body[key] !== undefined) product[key] = req.body[key];
+  fields.forEach((field) => {
+    if (req.body[field] !== undefined) product[field] = req.body[field];
   });
 
-  // Variant update (if provided)
   if (req.body.variants) {
-    product.variants =
+    const updatedVariants =
       typeof req.body.variants === "string"
         ? JSON.parse(req.body.variants)
         : req.body.variants;
+
+    product.variants = updatedVariants.filter(
+      (v) => v.size && v.price !== undefined
+    );
   }
 
   await product.save();
 
-  return res.status(200).json({
+  res.status(200).json({
     success: true,
     message: "Product updated successfully",
-    product
+    product,
   });
 });
 
 
-
 //
-//  DELETE PRODUCT
+// DELETE PRODUCT
 //
 export const deleteProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
@@ -200,9 +207,9 @@ export const deleteProduct = asyncHandler(async (req, res) => {
     throw new Error("Product not found");
   }
 
-  for (let img of product.images) {
-    if (img.public_id) {
-      await cloudinary.uploader.destroy(img.public_id);
+  if (product.images?.length > 0) {
+    for (const img of product.images) {
+      if (img?.public_id) await cloudinary.uploader.destroy(img.public_id);
     }
   }
 
@@ -215,93 +222,69 @@ export const deleteProduct = asyncHandler(async (req, res) => {
 });
 
 
+//
+// ADD REVIEW
+//
 export const addReview = asyncHandler(async (req, res) => {
   const { rating, comment } = req.body;
   const productId = req.params.id;
 
   const product = await Product.findById(productId);
-  if (!product) {
-    res.status(404);
-    throw new Error("Product not found");
-  }
+  if (!product) throw new Error("Product not found");
 
-  // Check if user purchased and delivered
   const deliveredOrder = await Order.findOne({
     user: req.user._id,
     "orderItems.productId": productId,
     orderStatus: "Delivered",
   });
 
-  if (!deliveredOrder) {
-    res.status(400);
-    throw new Error("You can review only after delivery");
-  }
+  if (!deliveredOrder) throw new Error("You can review only after delivery");
 
-  // Check duplicate review
   const existing = product.reviews.find(
     (r) => r.user.toString() === req.user._id.toString()
   );
 
-  if (existing) {
-    res.status(400);
-    throw new Error("You already reviewed this product");
-  }
+  if (existing) throw new Error("You already reviewed this product");
 
-  const review = {
+  product.reviews.push({
     user: req.user._id,
     name: req.user.name,
     rating: Number(rating),
     comment,
-    createdAt: new Date(),
-  };
+  });
 
-  product.reviews.push(review);
-
-  // update rating
   product.numOfReviews = product.reviews.length;
   product.ratings =
-    product.reviews.reduce((acc, item) => acc + item.rating, 0) /
-    product.reviews.length;
+    product.numOfReviews > 0
+      ? product.reviews.reduce((sum, r) => sum + r.rating, 0) /
+        product.numOfReviews
+      : 0;
 
   await product.save();
 
-  res.status(200).json({
-    success: true,
-    message: "Review added",
-    product, // 👈 send full product to refresh UI
-  });
+  res.status(200).json({ success: true, message: "Review added", product });
 });
 
 
-
+//
+// DELETE REVIEW
+//
 export const deleteReview = asyncHandler(async (req, res) => {
-  const { reviewId } = req.params;
-  const { productId } = req.body;
+  const { productId, reviewId } = req.params;
 
   const product = await Product.findById(productId);
+  if (!product) throw new Error("Product not found");
 
-  if (!product) {
-    res.status(404);
-    throw new Error("Product not found");
-  }
-
-  // filter out review
-  const updatedReviews = product.reviews.filter(
-    (rev) => rev._id.toString() !== reviewId
+  product.reviews = product.reviews.filter(
+    (r) => r._id.toString() !== reviewId
   );
 
-  if (updatedReviews.length === product.reviews.length) {
-    res.status(400);
-    throw new Error("Review not found");
-  }
-
-  product.reviews = updatedReviews;
-
-  // Update rating + count
-  product.numOfReviews = updatedReviews.length;
+  product.numOfReviews = product.reviews.length;
   product.ratings =
-    updatedReviews.reduce((acc, item) => acc + item.rating, 0) /
-    (updatedReviews.length || 1);
+    product.numOfReviews > 0
+      ? product.reviews.reduce((sum, r) => sum + r.rating, 0) /
+        product.numOfReviews
+      : 0;
 
   await product.save();
 

@@ -1,30 +1,75 @@
 import express from "express";
+
 import {
   getAllUsers,
   getMyProfile,
   updateUserProfile,
+  updateAvatar,
   addToWishlist,
   removeFromWishlist,
-  updateAddress,
+  saveAddress,
+  setDefaultAddress,
+  addWalletBalance,
+  deductWalletBalance,
+  addSubscription,
+  cancelSubscription,
 } from "../controllers/user.controller.js";
 
 import { protect } from "../middleware/auth.middleware.js";
 import { isAdmin } from "../middleware/admin.middleware.js";
+import { upload } from "../middleware/upload.middleware.js"; // avatar upload
 
 const router = express.Router();
 
-// Admin routes
+/* ===============================
+      ADMIN ROUTES
+================================ */
 router.get("/", protect, isAdmin, getAllUsers);
 
-// User profile
+/* ===============================
+      USER PROFILE ROUTES
+================================ */
+
+// Get Profile
 router.get("/me", protect, getMyProfile);
+
+// Update Profile
 router.put("/update", protect, updateUserProfile);
 
-// Wishlist
+// Update Avatar (single image upload)
+router.put(
+  "/avatar",
+  protect,
+  upload.single("avatar"),
+  updateAvatar
+);
+
+/* ===============================
+      WISHLIST ROUTES
+================================ */
 router.post("/wishlist/add", protect, addToWishlist);
 router.post("/wishlist/remove", protect, removeFromWishlist);
 
-// Address
-router.put("/address", protect, updateAddress);
+/* ===============================
+      ADDRESS ROUTES
+================================ */
+
+// Save or update first address
+router.put("/address", protect, saveAddress);
+
+// Change default address
+router.put("/address/default", protect, setDefaultAddress);
+
+/* ===============================
+      WALLET ROUTES
+================================ */
+router.post("/wallet/add", protect, addWalletBalance);
+router.post("/wallet/deduct", protect, deductWalletBalance);
+
+/* ===============================
+      SUBSCRIPTION ROUTES
+================================ */
+router.post("/subscription/add", protect, addSubscription);
+router.post("/subscription/cancel", protect, cancelSubscription);
 
 export default router;
