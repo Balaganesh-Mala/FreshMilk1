@@ -2,11 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { FaStar, FaArrowLeft } from "react-icons/fa";
 
-import {
-  fetchProductById,
-  fetchProducts,
-  addToCart,
-} from "../api/project.api";
+import { fetchProductById, fetchProducts, addToCart } from "../api/project.api";
 
 import ProductCard from "../components/ui/ProductCard";
 import Swal from "sweetalert2";
@@ -32,8 +28,7 @@ const ProductDetails = () => {
     let viewed = JSON.parse(localStorage.getItem("recent_viewed")) || [];
     viewed = viewed.filter((p) => p._id !== product._id);
 
-    const basePrice =
-      product?.variants?.[0]?.price ?? product.price ?? 0;
+    const basePrice = product?.variants?.[0]?.price ?? product.price ?? 0;
 
     viewed.unshift({
       _id: product._id,
@@ -138,31 +133,25 @@ const ProductDetails = () => {
     );
 
   if (!product)
-    return (
-      <p className="text-center text-gray-500 py-20">Product Not Found</p>
-    );
+    return <p className="text-center text-gray-500 py-20">Product Not Found</p>;
 
   /* -------------------------------
      PRICE LOGIC
   ------------------------------- */
-  const mainPrice =
-    selectedVariant?.price ?? product.price ?? 0;
+  const mainPrice = selectedVariant?.price ?? product.price ?? 0;
 
-  const mrp =
-    selectedVariant?.mrp ?? product.mrp ?? mainPrice;
+  const mrp = selectedVariant?.mrp ?? product.mrp ?? mainPrice;
 
   const discount =
     mrp > mainPrice ? Math.round(((mrp - mainPrice) / mrp) * 100) : 0;
 
-  const stock =
-    selectedVariant?.stock ?? product.baseStock ?? 0;
+  const stock = selectedVariant?.stock ?? product.baseStock ?? 0;
 
   /* -------------------------------
      UI START
   ------------------------------- */
   return (
     <div className="bg-[#F6FBFF] min-h-screen pb-20">
-
       {/* HEADER */}
       <div className="max-w-6xl mx-auto px-6 py-8 flex items-center gap-3">
         <button
@@ -175,10 +164,8 @@ const ProductDetails = () => {
 
       {/* MAIN CONTENT */}
       <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-10">
-
         {/* LEFT IMAGES */}
         <div className="flex flex-col md:flex-row gap-4">
-
           {/* Thumbnails */}
           <div className="hidden md:flex flex-col gap-3">
             {product.images?.map((img, i) => (
@@ -266,7 +253,11 @@ const ProductDetails = () => {
                   : "bg-[#FFF7D9] text-[#B08500]"
               }`}
             >
-              {stock === 0 ? "Out of Stock" : stock > 50 ? "In Stock" : "Limited Stock"}
+              {stock === 0
+                ? "Out of Stock"
+                : stock > 50
+                ? "In Stock"
+                : "Limited Stock"}
             </span>
           </p>
 
@@ -294,31 +285,45 @@ const ProductDetails = () => {
           </div>
 
           {/* BUTTONS */}
-          <div className="mt-7 flex gap-4">
-            <button
-              onClick={handleAddToCart}
-              disabled={stock === 0}
-              className={`px-6 py-3 rounded-xl font-semibold shadow ${
-                stock === 0
-                  ? "bg-gray-300 cursor-not-allowed text-gray-600"
-                  : "bg-[#3A8DFF] hover:bg-[#3377D6] text-white"
-              }`}
-            >
-              {stock === 0 ? "Out of Stock" : "Add to Cart"}
-            </button>
+<div className="mt-7 flex flex-wrap gap-4">
 
-            <button
-              onClick={handleBuyNow}
-              disabled={stock === 0}
-              className={`px-6 py-3 rounded-xl font-semibold border ${
-                stock === 0
-                  ? "border-gray-400 text-gray-400 cursor-not-allowed"
-                  : "border-[#3A8DFF] text-[#3A8DFF] hover:bg-[#E7F2FF]"
-              }`}
-            >
-              Buy Now
-            </button>
-          </div>
+  {/* Add to Cart */}
+  <button
+    onClick={handleAddToCart}
+    disabled={stock === 0}
+    className={`px-6 py-3 rounded-xl font-semibold shadow ${
+      stock === 0
+        ? "bg-gray-300 cursor-not-allowed text-gray-600"
+        : "bg-[#3A8DFF] hover:bg-[#3377D6] text-white"
+    }`}
+  >
+    {stock === 0 ? "Out of Stock" : "Add to Cart"}
+  </button>
+
+  {/* Buy Now */}
+  <button
+    onClick={handleBuyNow}
+    disabled={stock === 0}
+    className={`px-6 py-3 rounded-xl font-semibold border ${
+      stock === 0
+        ? "border-gray-400 text-gray-400 cursor-not-allowed"
+        : "border-[#3A8DFF] text-[#3A8DFF] hover:bg-[#E7F2FF]"
+    }`}
+  >
+    Buy Now
+  </button>
+
+  {/* SUBSCRIBE BUTTON — show only if backend allows */}
+  {product.isSubscriptionAvailable && (
+    <button
+      onClick={() => navigate(`/subscribe/${product._id}`)}
+      className="px-6 py-3 rounded-xl font-semibold bg-green-600 text-white shadow hover:bg-green-700 transition"
+    >
+      Subscribe Now
+    </button>
+  )}
+</div>
+
         </div>
       </div>
 
@@ -356,7 +361,9 @@ const ProductDetails = () => {
                   {[...Array(5)].map((_, idx) => (
                     <FaStar
                       key={idx}
-                      className={idx < rev.rating ? "text-[#FFD700]" : "text-gray-300"}
+                      className={
+                        idx < rev.rating ? "text-[#FFD700]" : "text-gray-300"
+                      }
                       size={14}
                     />
                   ))}
@@ -368,7 +375,6 @@ const ProductDetails = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

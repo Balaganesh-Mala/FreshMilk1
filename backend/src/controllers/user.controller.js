@@ -1,19 +1,16 @@
 import asyncHandler from "express-async-handler";
 import User from "../models/user.model.js";
 import cloudinary from "../config/cloudinary.js";
+import { uploadToCloudinary } from "../middleware/upload.middleware.js";
 import Product from "../models/product.model.js"; // for wishlist validation
 
-// =======================================
-// ⭐ Admin - Get All Users
-// =======================================
+
 export const getAllUsers = asyncHandler(async (req, res) => {
   const users = await User.find().select("-password");
   res.status(200).json({ success: true, users });
 });
 
-// =======================================
-// 👤 Get Logged In User Profile
-// =======================================
+
 export const getMyProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id).select("-password");
   if (!user) throw new Error("User not found");
@@ -21,9 +18,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, user });
 });
 
-// =======================================
-// ✏️ Update Profile (name, phone)
-// =======================================
+
 export const updateUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
 
@@ -49,9 +44,7 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
   });
 });
 
-// =======================================
-// 🖼 Update Avatar
-// =======================================
+
 export const updateAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
   if (!user) throw new Error("User not found");
@@ -242,46 +235,103 @@ export const deductWalletBalance = asyncHandler(async (req, res) => {
   });
 });
 
-// =======================================
-// 📌 Add Subscription (from cart/buy now or popup)
-// =======================================
+// ------------------- Get user's subscriptions -------------------
+export const getMySubscriptions = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id).populate({
+    path: "subscriptions.product",
+    select: "name images variants price stock",
+  });
+  if (!user) throw new Error("User not found");
+
+  res.status(200).json({
+    success: true,
+    subscriptions: user.subscriptions || [],
+  });
+});
+
+// ------------------- Add subscription (basic) -------------------
 export const addSubscription = asyncHandler(async (req, res) => {
-  const { productId, variantSize, plan } = req.body;
+  const { productId, variantSize, plan, nextDeliveryDate } = req.body;
+
+  if (!productId || !plan) {
+    res.status(400);
+    throw new Error("productId and plan are required");
+  }
+
+  const product = await Product.findById(productId);
+  if (!product) {
+    res.status(404);
+    throw new Error("Product not found");
+  }
 
   const user = await User.findById(req.user.id);
   if (!user) throw new Error("User not found");
 
-  user.subscriptions.push({
-    product: productId,
-    variantSize,
-    plan,
-  });
+  // Prevent duplicate active subscription for same product+variant+plan
+  const exists = user.subscriptions.find(
+    (s) =>
+      s.product.toString() === productId.toString() &&
+      (s.variantSize || "") === (variantSize || "") &&
+      s.plan === plan &&
+      s.status === "active"
+  );
 
+  if (exists) {
+    res.status(400);
+    throw new Error("You already have an active subscription for this product/plan");
+  }
+
+  const subscription = {
+    product: productId,
+    variantSize: variantSize || null,
+    plan,
+  };
+
+  if (nextDeliveryDate) {
+    const nd = new Date(nextDeliveryDate);
+    if (!isNaN(nd)) subscription.nextDeliveryDate = nd;
+  }
+
+  user.subscriptions.push(subscription);
   await user.save();
+
+  // populate the newly added subscription product for response
+  await user.populate({
+    path: "subscriptions.product",
+    select: "name images variants price",
+  });
 
   res.status(200).json({
     success: true,
-    message: "Subscription added",
+    message: "Subscription added (basic)",
     subscriptions: user.subscriptions,
   });
 });
 
-// =======================================
-// 🗑 Cancel Subscription
-// =======================================
+// ------------------- Cancel subscription -------------------
 export const cancelSubscription = asyncHandler(async (req, res) => {
   const { subId } = req.body;
+  if (!subId) {
+    res.status(400);
+    throw new Error("subId is required");
+  }
 
   const user = await User.findById(req.user.id);
+  if (!user) throw new Error("User not found");
 
-  user.subscriptions = user.subscriptions.filter(
-    (s) => s._id.toString() !== subId
-  );
+  const sub = user.subscriptions.id(subId);
+  if (!sub) {
+    res.status(404);
+    throw new Error("Subscription not found");
+  }
 
+  // either remove or set status to cancelled
+  sub.status = "cancelled";
   await user.save();
 
   res.status(200).json({
     success: true,
     message: "Subscription cancelled",
+    subscriptions: user.subscriptions,
   });
 });

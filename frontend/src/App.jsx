@@ -14,7 +14,8 @@ import CheckoutPage from "./pages/CheckoutPage";
 import Footer from "./components/layout/Footer";
 
 import EditAddressPage from "./pages/EditAddressPage.jsx";
-import SubscriptionsPage from "./pages/SubscriptionsPage.jsx";
+import Subscriptions from "./pages/Subscriptions.jsx";
+import SubscribePage from "./pages/SubscriptionsPage.jsx";
 import WishlistPage from "./pages/WishlistPage.jsx";
 
 export default function App() {
@@ -35,7 +36,9 @@ export default function App() {
         <Route path="/account" element={<AccountPage />} />
         <Route path="/edit-profile" element={<EditProfile />} />
         <Route path="/add-address" element={<EditAddressPage />} />
-        <Route path="/subscription" element={<SubscriptionsPage />} />
+        <Route path="/subscription" element={<Subscriptions />} />
+        <Route path="/subscribe/:id" element={<SubscribePage />} />
+
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route
           path="*"

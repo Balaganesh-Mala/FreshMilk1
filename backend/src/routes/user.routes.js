@@ -11,8 +11,7 @@ import {
   setDefaultAddress,
   addWalletBalance,
   deductWalletBalance,
-  addSubscription,
-  cancelSubscription,
+  getMySubscriptions, addSubscription, cancelSubscription
 } from "../controllers/user.controller.js";
 
 import { protect } from "../middleware/auth.middleware.js";
@@ -69,6 +68,7 @@ router.post("/wallet/deduct", protect, deductWalletBalance);
 /* ===============================
       SUBSCRIPTION ROUTES
 ================================ */
+router.get("/subscriptions", protect, getMySubscriptions);
 router.post("/subscription/add", protect, addSubscription);
 router.post("/subscription/cancel", protect, cancelSubscription);
 

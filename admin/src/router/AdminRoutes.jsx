@@ -16,6 +16,8 @@ import Settings from "../pages/admin/Settings.jsx";
 import Categories from "../pages/admin/Categories.jsx";
 import BlogManager from "../pages/admin/BlogManager.jsx";
 import ContactMessages from "../pages/admin/ContactMessages.jsx";
+import AdminSubscriptions from "../pages/admin/AdminSubscriptions.jsx";
+import AdminBanners from "../pages/admin/AdminBanners.jsx";
 
 
 import AdminProtectedRoute from "../components/common/ProtectedRoute.jsx";
@@ -47,6 +49,8 @@ const AdminRoutes = () => {
           <Route path="settings" element={<Settings />} />
           <Route path="categories" element={<Categories />} />
           <Route path="messages" element={<ContactMessages />} />
+          <Route path="subscriptions" element={<AdminSubscriptions/>} />
+          <Route path="banner" element={<AdminBanners/>} />
         </Route>
 
         {/* Catch all */}

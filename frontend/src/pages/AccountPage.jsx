@@ -286,7 +286,6 @@ export default function AccountPage() {
             ["orders", <FaBox />, "Orders"],
             ["address", <FaMapMarkedAlt />, "Address"],
             ["wishlist", <FaHeart />, "Wishlist"],
-            ["wallet", <FaWallet />, "Wallet"],
             ["subscriptions", <FaBell />, "Subscriptions"],
           ].map(([tab, icon, label]) => (
             <button

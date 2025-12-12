@@ -8,6 +8,7 @@ import {
   getAllOrders,
   getAllUsers,
   updateOrderStatus,
+  getAllActiveSubscriptions,
 } from "../controllers/admin.controller.js";
 
 import { protect } from "../middleware/auth.middleware.js";
@@ -38,5 +39,7 @@ router.put("/order/:id/status", protect, isAdmin, updateOrderStatus);
 
 // Fetch all customer accounts
 router.get("/users", protect, isAdmin, getAllUsers);
+
+router.get("/subscriptions/active", protect, isAdmin, getAllActiveSubscriptions);
 
 export default router;

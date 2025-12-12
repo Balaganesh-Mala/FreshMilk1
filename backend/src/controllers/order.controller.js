@@ -213,6 +213,19 @@ export const getAllOrders = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, orders });
 });
 
+
+export const getOrderById = asyncHandler(async (req, res) => {
+  const order = await Order.findOne({
+    _id: req.params.id,
+    user: req.user.id, // security
+  });
+
+  if (!order) {
+    return res.status(404).json({ success: false, message: "Order not found" });
+  }
+
+  res.status(200).json({ success: true, order });
+});
 /* ---------------------------------------------------------
    ADMIN — UPDATE ORDER STATUS
 --------------------------------------------------------- */

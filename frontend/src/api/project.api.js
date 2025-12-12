@@ -32,12 +32,19 @@ export const addWalletBalance = (amount) =>
 export const deductWalletBalance = (amount) =>
   API.post("/users/wallet/deduct", { amount });
 
-/* ------------------------- SUBSCRIPTION ------------------------- */
+/* ---------- SUBSCRIPTION ---------- */
 export const addSubscription = (data) =>
-  API.post("/users/subscription/add", data);
+  API.post("/users/subscription/add", data, {
+    headers: { "Content-Type": "application/json" },
+  });
 
-export const cancelSubscription = (subscriptionId) =>
-  API.post("/users/subscription/cancel", { subscriptionId });
+export const cancelSubscription = (data) =>
+  API.post("/users/subscription/cancel", data, {
+    headers: { "Content-Type": "application/json" },
+  });
+
+export const fetchMySubscriptions = () => API.get("/users/subscriptions");
+
 
 /* ------------------------- CATEGORY ------------------------- */
 export const getCategories = () => API.get("/categories");
@@ -94,10 +101,14 @@ export const removeCartItem = (productId, variantSize = null) =>
     data: { productId, variantSize },
   });
 
-/* ------------------------- ORDER ------------------------- */
+// Create new order
 export const createOrder = (data) => API.post("/orders", data);
+
+// Get logged-in user's orders
 export const getMyOrders = () => API.get("/orders/my-orders");
 
+// ⭐ Get a single order by ID (needed for OrderDetails page)
+export const getOrderById = (id) => API.get(`/orders/${id}`);
 /* ------------------------- PAYMENT ------------------------- */
 export const createPaymentOrder = (data) =>
   API.post("/payment/create-order", data);

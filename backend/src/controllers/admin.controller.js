@@ -245,3 +245,47 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
     order,
   });
 });
+
+
+export const getAllActiveSubscriptions = asyncHandler(async (req, res) => {
+  const users = await User.find(
+    { "subscriptions.status": "active" },
+    {
+      name: 1,
+      email: 1,
+      phone: 1,
+      subscriptions: 1
+    }
+  )
+    .populate("subscriptions.product", "name images price variants")
+    .lean();
+
+  // Flatten response for admin UI
+  let activeSubs = [];
+
+  users.forEach((user) => {
+    user.subscriptions.forEach((sub) => {
+      if (sub.status === "active") {
+        activeSubs.push({
+          userId: user._id,
+          userName: user.name,
+          userPhone: user.phone,
+          userEmail: user.email,
+
+          subscriptionId: sub._id,
+          product: sub.product,
+          plan: sub.plan,
+          variantSize: sub.variantSize,
+          nextDeliveryDate: sub.nextDeliveryDate,
+          createdAt: sub.createdAt,
+        });
+      }
+    });
+  });
+
+  res.status(200).json({
+    success: true,
+    total: activeSubs.length,
+    activeSubscriptions: activeSubs,
+  });
+});

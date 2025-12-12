@@ -14,15 +14,25 @@ const addressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// models/user.model.js  (only subscription part shown)
 const subscriptionSchema = new mongoose.Schema(
   {
-    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-    variantSize: String,
-    plan: String,
-    status: { type: String, default: "active" },
+    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+    variantSize: { type: String },
+    plan: {
+      type: String,
+      enum: ["daily", "weekly", "monthly", "custom"],
+      default: "daily",
+    },
+    status: { type: String, enum: ["active", "paused", "cancelled"], default: "active" },
+    // optional helpful fields for future features (basic system won't act on this)
+    nextDeliveryDate: { type: Date }, // optional, can be set by admin/frontend
+    createdAt: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { _id: true }
 );
+
+
 
 const userSchema = new mongoose.Schema(
   {

@@ -4,23 +4,22 @@ import Order from "../models/order.model.js";
 import cloudinary from "../config/cloudinary.js";
 import { uploadMultipleToCloudinary } from "../middleware/upload.middleware.js";
 
-//
-// SKU Generator
-//
+/* ============================
+   SKU Generator
+============================ */
 const generateSKU = () =>
-  `MILK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  `MILK-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
-
-//
-// CREATE PRODUCT
-//
+/* ============================
+   CREATE PRODUCT
+============================ */
 export const createProduct = asyncHandler(async (req, res) => {
   try {
     const {
       name,
       description,
       price,
-      baseStock,
+      stock,          // ✔ Correct field name
       mrp,
       weight,
       flavor,
@@ -38,13 +37,12 @@ export const createProduct = asyncHandler(async (req, res) => {
       throw new Error("Required fields missing");
     }
 
+    // Parse variants
     let parsedVariants = [];
-
     if (variants) {
       parsedVariants =
         typeof variants === "string" ? JSON.parse(variants) : variants;
 
-      // ensure no empty variant
       parsedVariants = parsedVariants.filter(
         (v) => v.size && v.price !== undefined
       );
@@ -52,7 +50,7 @@ export const createProduct = asyncHandler(async (req, res) => {
 
     // Upload Images
     let imageData = [];
-    if (req.files?.length > 0) {
+    if (req.files && req.files.length > 0) {
       imageData = await uploadMultipleToCloudinary(req.files, "products");
     }
 
@@ -62,7 +60,7 @@ export const createProduct = asyncHandler(async (req, res) => {
       name,
       description,
       price,
-      baseStock,
+      stock,                 // ✔ correct field
       mrp,
       weight,
       flavor,
@@ -88,10 +86,9 @@ export const createProduct = asyncHandler(async (req, res) => {
   }
 });
 
-
-//
-// GET ALL PRODUCTS
-//
+/* ============================
+   GET ALL PRODUCTS
+============================ */
 export const getAllProducts = asyncHandler(async (req, res) => {
   const { search, category, featured, bestseller, flavor, subscription, sort } =
     req.query;
@@ -103,7 +100,8 @@ export const getAllProducts = asyncHandler(async (req, res) => {
   if (featured) query.isFeatured = featured === "true";
   if (bestseller) query.isBestSeller = bestseller === "true";
   if (flavor) query.flavor = { $regex: flavor, $options: "i" };
-  if (subscription) query.isSubscriptionAvailable = subscription === "true";
+  if (subscription)
+    query.isSubscriptionAvailable = subscription === "true";
 
   let dbQuery = Product.find(query).populate("category", "name");
 
@@ -112,14 +110,12 @@ export const getAllProducts = asyncHandler(async (req, res) => {
   if (!sort) dbQuery.sort({ createdAt: -1 });
 
   const products = await dbQuery;
-
   res.status(200).json({ success: true, products });
 });
 
-
-//
-// GET PRODUCT BY ID
-//
+/* ============================
+   GET PRODUCT BY ID
+============================ */
 export const getProductById = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id).populate("category");
 
@@ -131,10 +127,9 @@ export const getProductById = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, product });
 });
 
-
-//
-// UPDATE PRODUCT
-//
+/* ============================
+   UPDATE PRODUCT
+============================ */
 export const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
 
@@ -143,23 +138,24 @@ export const updateProduct = asyncHandler(async (req, res) => {
     throw new Error("Product not found");
   }
 
+  // Handle image replacement
   if (req.files?.length > 0) {
-    if (product.images?.length > 0) {
-      for (const img of product.images) {
-        if (img?.public_id)
-          await cloudinary.uploader.destroy(img.public_id);
-      }
+    // Delete old images
+    for (const img of product.images) {
+      if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
     }
 
+    // Upload new
     const newImages = await uploadMultipleToCloudinary(req.files, "products");
     product.images = newImages;
   }
 
+  // Update fields
   const fields = [
     "name",
     "description",
     "price",
-    "baseStock",
+    "stock",     // ✔ fixed
     "mrp",
     "category",
     "flavor",
@@ -175,6 +171,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
     if (req.body[field] !== undefined) product[field] = req.body[field];
   });
 
+  // Update variants
   if (req.body.variants) {
     const updatedVariants =
       typeof req.body.variants === "string"
@@ -195,22 +192,16 @@ export const updateProduct = asyncHandler(async (req, res) => {
   });
 });
 
-
-//
-// DELETE PRODUCT
-//
+/* ============================
+   DELETE PRODUCT
+============================ */
 export const deleteProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
 
-  if (!product) {
-    res.status(404);
-    throw new Error("Product not found");
-  }
+  if (!product) throw new Error("Product not found");
 
-  if (product.images?.length > 0) {
-    for (const img of product.images) {
-      if (img?.public_id) await cloudinary.uploader.destroy(img.public_id);
-    }
+  for (const img of product.images) {
+    if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
   }
 
   await product.deleteOne();
@@ -221,10 +212,9 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   });
 });
 
-
-//
-// ADD REVIEW
-//
+/* ============================
+   ADD REVIEW
+============================ */
 export const addReview = asyncHandler(async (req, res) => {
   const { rating, comment } = req.body;
   const productId = req.params.id;
@@ -238,13 +228,14 @@ export const addReview = asyncHandler(async (req, res) => {
     orderStatus: "Delivered",
   });
 
-  if (!deliveredOrder) throw new Error("You can review only after delivery");
+  if (!deliveredOrder)
+    throw new Error("You can review only after delivery");
 
-  const existing = product.reviews.find(
+  const already = product.reviews.find(
     (r) => r.user.toString() === req.user._id.toString()
   );
 
-  if (existing) throw new Error("You already reviewed this product");
+  if (already) throw new Error("You already reviewed this product");
 
   product.reviews.push({
     user: req.user._id,
@@ -255,20 +246,21 @@ export const addReview = asyncHandler(async (req, res) => {
 
   product.numOfReviews = product.reviews.length;
   product.ratings =
-    product.numOfReviews > 0
-      ? product.reviews.reduce((sum, r) => sum + r.rating, 0) /
-        product.numOfReviews
-      : 0;
+    product.reviews.reduce((sum, r) => sum + r.rating, 0) /
+    product.numOfReviews;
 
   await product.save();
 
-  res.status(200).json({ success: true, message: "Review added", product });
+  res.status(200).json({
+    success: true,
+    message: "Review added successfully",
+    product,
+  });
 });
 
-
-//
-// DELETE REVIEW
-//
+/* ============================
+   DELETE REVIEW
+============================ */
 export const deleteReview = asyncHandler(async (req, res) => {
   const { productId, reviewId } = req.params;
 
@@ -281,7 +273,7 @@ export const deleteReview = asyncHandler(async (req, res) => {
 
   product.numOfReviews = product.reviews.length;
   product.ratings =
-    product.numOfReviews > 0
+    product.numOfReviews
       ? product.reviews.reduce((sum, r) => sum + r.rating, 0) /
         product.numOfReviews
       : 0;
@@ -290,7 +282,7 @@ export const deleteReview = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: "Review deleted successfully",
+    message: "Review deleted",
     reviews: product.reviews,
   });
 });
